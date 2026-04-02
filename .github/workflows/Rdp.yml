@@ -119,25 +119,39 @@ jobs:
               Write-Host "│ ❌ Không tìm thấy file $sourceImage" -ForegroundColor Red
               exit 1
           }
-          $scriptContent = @"
-`$wallpaper = "$destImage"
-Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value `$wallpaper -Force
-Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value 2 -Force
-Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value 0 -Force
-RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
-"@
           $scriptPath = "C:\Windows\Setup\Scripts\SetZunnyWallpaper.ps1"
           New-Item -ItemType Directory -Path "C:\Windows\Setup\Scripts" -Force -ErrorAction SilentlyContinue
-          $scriptContent | Out-File -FilePath $scriptPath -Encoding ASCII -Force
+          $scriptLines = @(
+              '$wp = "C:\Windows\Web\Wallpaper\Zunny\zunny_wallpaper.png"',
+              'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value $wp -Force',
+              'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2" -Force',
+              'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0" -Force',
+              'Add-Type -TypeDefinition "using System; using System.Runtime.InteropServices; public class WPHelper { [DllImport(\"user32.dll\", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); }" -ErrorAction SilentlyContinue',
+              '[WPHelper]::SystemParametersInfo(20, 0, $wp, 3)'
+          )
+          $scriptLines | Set-Content -Path $scriptPath -Encoding UTF8 -Force
           Write-Host "│ ✅ Đã tạo script set wallpaper tại $scriptPath" -ForegroundColor Green
           $guid = [guid]::NewGuid().ToString("B")
           $regPath = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\$guid"
           New-Item -Path $regPath -Force | Out-Null
-          Set-ItemProperty -Path $regPath -Name "StubPath" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$scriptPath`"" -Force
+          Set-ItemProperty -Path $regPath -Name "StubPath" -Value "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`"" -Force
           Set-ItemProperty -Path $regPath -Name "Version" -Value "1,0" -Force
           Set-ItemProperty -Path $regPath -Name "ComponentID" -Value "ZunnyWallpaper" -Force
           Write-Host "│ ✅ Đã đăng ký Active Setup với GUID: $guid" -ForegroundColor Green
-          Write-Host "│ 🔄 Khi user $userName đăng nhập lần đầu, wallpaper sẽ tự động được set" -ForegroundColor Cyan
+          try {
+              reg load "HKU\ZunnyDefault" "C:\Users\Default\NTUSER.DAT" 2>&1 | Out-Null
+              New-Item -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Force -ErrorAction SilentlyContinue | Out-Null
+              Set-ItemProperty -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Name "Wallpaper" -Value $destImage -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2" -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Name "TileWallpaper" -Value "0" -Force -ErrorAction SilentlyContinue
+              [gc]::Collect()
+              Start-Sleep -Seconds 1
+              reg unload "HKU\ZunnyDefault" 2>&1 | Out-Null
+              Write-Host "│ ✅ Đã set wallpaper vào Default User hive" -ForegroundColor Green
+          } catch {
+              Write-Host "│ ⚠️  Không thể sửa Default User hive (bỏ qua)" -ForegroundColor Yellow
+          }
+          Write-Host "│ 🔔 Khi user $userName đăng nhập lần đầu, wallpaper sẽ tự động được set" -ForegroundColor Cyan
           Write-Host "🎯 Cấu hình wallpaper hoàn tất!" -ForegroundColor Green
 
       - name: 🔍 KIỂM TRA QUYỀN HỆ THỐNG
