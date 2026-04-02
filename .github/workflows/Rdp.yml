@@ -88,7 +88,7 @@ jobs:
           Write-Host "👤 ĐANG TẠO TÀI KHOẢN ZUNNY" -ForegroundColor Yellow
           
           # Tạo mật khẩu random 12 ký tự: Zunny + 6 ký tự ngẫu nhiên
-          $randomPart = -join ((65..90) + (97..122) + (48..57) + (33..43) | Get-Random -Count 6 | ForEach-Object { [char]$_ })
+          $randomPart = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 6 | ForEach-Object { [char]$_ })
           $matKhau = "Zunny$randomPart"
           $securePass = ConvertTo-SecureString $matKhau -AsPlainText -Force
           $userName = "ZunnyUser"
@@ -128,7 +128,7 @@ jobs:
           
           Write-Host "✅ Tài khoản $userName đã sẵn sàng" -ForegroundColor Green
 
-      # THIẾT LẬP HÌNH NỀN CHO USER VỪA TẠO
+      # THIẾT LẬP HÌNH NỀN CHO USER VỪA TẠO (tạo profile trước)
       - name: 🖼️ CÀI ĐẶT WALLPAPER ZUNNY
         run: |
           Write-Host ""
@@ -137,6 +137,7 @@ jobs:
           $sourceImage = "image/image.png"
           $destImage = "C:\Windows\Web\Wallpaper\Zunny\zunny_wallpaper.png"
           $userName = $env:RDP_USER
+          $password = $env:RDP_PASS
           
           # Tạo thư mục đích
           New-Item -ItemType Directory -Path "C:\Windows\Web\Wallpaper\Zunny" -Force -ErrorAction SilentlyContinue
@@ -150,12 +151,29 @@ jobs:
               exit 1
           }
           
+          # Tạo profile cho user bằng cách đăng nhập một lần
+          Write-Host "│ 🔄 Đang tạo profile cho user $userName..." -ForegroundColor Blue
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          $cred = New-Object System.Management.Automation.PSCredential($userName, $securePass)
+          try {
+              # Chạy một process với user để tạo profile
+              Start-Process -Credential $cred -FilePath "cmd.exe" -ArgumentList "/c exit" -WindowStyle Hidden -Wait
+              Write-Host "│ ✅ Đã tạo profile cho user $userName" -ForegroundColor Green
+          } catch {
+              Write-Host "│ ⚠️  Không thể tạo profile bằng Start-Process, thử cách khác..." -ForegroundColor Yellow
+              # Fallback: dùng runas (có thể yêu cầu savecred, nhưng trong môi trường CI có thể không hoạt động)
+              runas /user:$userName "cmd /c exit" | Out-Null
+          }
+          
+          # Chờ một chút để profile được ghi
+          Start-Sleep -Seconds 5
+          
           # Set wallpaper cho user thông qua registry hive
           try {
               # Lấy đường dẫn profile của user
               $userProfile = Get-WmiObject Win32_UserProfile | Where-Object { $_.LocalPath -like "*\$userName" } | Select-Object -First 1
               if (-not $userProfile) {
-                  Write-Host "│ ⚠️  Không tìm thấy profile của user $userName, wallpaper sẽ không được set tự động" -ForegroundColor Yellow
+                  Write-Host "│ ⚠️  Không tìm thấy profile của user $userName sau khi tạo" -ForegroundColor Yellow
               } else {
                   $ntuserPath = Join-Path $userProfile.LocalPath "NTUSER.DAT"
                   if (Test-Path $ntuserPath) {
@@ -170,7 +188,7 @@ jobs:
                       reg unload "HKU\TempZunny" | Out-Null
                       Write-Host "│ ✅ Đã set wallpaper cho user $userName" -ForegroundColor Green
                   } else {
-                      Write-Host "│ ⚠️  Không tìm thấy NTUSER.DAT cho user $userName" -ForegroundColor Yellow
+                      Write-Host "│ ⚠️  NTUSER.DAT chưa được tạo cho user $userName" -ForegroundColor Yellow
                   }
               }
           } catch {
