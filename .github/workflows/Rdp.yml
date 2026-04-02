@@ -128,20 +128,19 @@ jobs:
           
           Write-Host "✅ Tài khoản $userName đã sẵn sàng" -ForegroundColor Green
 
-      # THIẾT LẬP HÌNH NỀN CHO USER VỪA TẠO (tạo profile trước)
-      - name: 🖼️ CÀI ĐẶT WALLPAPER ZUNNY
+      # THIẾT LẬP WALLPAPER BẰNG ACTIVE SETUP (ĐẢM BẢO SET ĐƯỢC NỀN)
+      - name: 🖼️ CÀI ĐẶT WALLPAPER ZUNNY (ACTIVE SETUP)
         run: |
           Write-Host ""
-          Write-Host "🖼️ ĐANG CÀI ĐẶT HÌNH NỀN ZUNNY CHO USER $env:RDP_USER" -ForegroundColor Yellow
-          
+          Write-Host "🖼️ ĐANG CÀI ĐẶT HÌNH NỀN ZUNNY QUA ACTIVE SETUP" -ForegroundColor Yellow
+
           $sourceImage = "image/image.png"
           $destImage = "C:\Windows\Web\Wallpaper\Zunny\zunny_wallpaper.png"
           $userName = $env:RDP_USER
-          $password = $env:RDP_PASS
-          
+
           # Tạo thư mục đích
           New-Item -ItemType Directory -Path "C:\Windows\Web\Wallpaper\Zunny" -Force -ErrorAction SilentlyContinue
-          
+
           # Copy ảnh
           if (Test-Path $sourceImage) {
               Copy-Item -Path $sourceImage -Destination $destImage -Force
@@ -150,52 +149,36 @@ jobs:
               Write-Host "│ ❌ Không tìm thấy file $sourceImage" -ForegroundColor Red
               exit 1
           }
-          
-          # Tạo profile cho user bằng cách đăng nhập một lần
-          Write-Host "│ 🔄 Đang tạo profile cho user $userName..." -ForegroundColor Blue
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          $cred = New-Object System.Management.Automation.PSCredential($userName, $securePass)
-          try {
-              # Chạy một process với user để tạo profile
-              Start-Process -Credential $cred -FilePath "cmd.exe" -ArgumentList "/c exit" -WindowStyle Hidden -Wait
-              Write-Host "│ ✅ Đã tạo profile cho user $userName" -ForegroundColor Green
-          } catch {
-              Write-Host "│ ⚠️  Không thể tạo profile bằng Start-Process, thử cách khác..." -ForegroundColor Yellow
-              # Fallback: dùng runas (có thể yêu cầu savecred, nhưng trong môi trường CI có thể không hoạt động)
-              runas /user:$userName "cmd /c exit" | Out-Null
-          }
-          
-          # Chờ một chút để profile được ghi
-          Start-Sleep -Seconds 5
-          
-          # Set wallpaper cho user thông qua registry hive
-          try {
-              # Lấy đường dẫn profile của user
-              $userProfile = Get-WmiObject Win32_UserProfile | Where-Object { $_.LocalPath -like "*\$userName" } | Select-Object -First 1
-              if (-not $userProfile) {
-                  Write-Host "│ ⚠️  Không tìm thấy profile của user $userName sau khi tạo" -ForegroundColor Yellow
-              } else {
-                  $ntuserPath = Join-Path $userProfile.LocalPath "NTUSER.DAT"
-                  if (Test-Path $ntuserPath) {
-                      # Load hive
-                      reg load "HKU\TempZunny" $ntuserPath | Out-Null
-                      $regPath = "Registry::HKEY_USERS\TempZunny\Control Panel\Desktop"
-                      Set-ItemProperty -Path $regPath -Name "Wallpaper" -Value $destImage -Force
-                      Set-ItemProperty -Path $regPath -Name "WallpaperStyle" -Value 2 -Force
-                      Set-ItemProperty -Path $regPath -Name "TileWallpaper" -Value 0 -Force
-                      # Unload hive
-                      [gc]::Collect()
-                      reg unload "HKU\TempZunny" | Out-Null
-                      Write-Host "│ ✅ Đã set wallpaper cho user $userName" -ForegroundColor Green
-                  } else {
-                      Write-Host "│ ⚠️  NTUSER.DAT chưa được tạo cho user $userName" -ForegroundColor Yellow
-                  }
-              }
-          } catch {
-              Write-Host "│ ⚠️  Không thể set wallpaper qua registry: $($_.Exception.Message)" -ForegroundColor Yellow
-          }
-          
-          Write-Host "🎯 Hình nền Zunny đã sẵn sàng!" -ForegroundColor Green
+
+          # Tạo script đặt wallpaper (PowerShell)
+          $scriptContent = @"
+`$wallpaper = "$destImage"
+Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value `$wallpaper -Force
+Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value 2 -Force   # 2 = Stretch
+Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value 0 -Force
+# Kích hoạt wallpaper ngay
+RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
+"@
+
+          $scriptPath = "C:\Windows\Setup\Scripts\SetZunnyWallpaper.ps1"
+          New-Item -ItemType Directory -Path "C:\Windows\Setup\Scripts" -Force -ErrorAction SilentlyContinue
+          $scriptContent | Out-File -FilePath $scriptPath -Encoding ASCII -Force
+          Write-Host "│ ✅ Đã tạo script set wallpaper tại $scriptPath" -ForegroundColor Green
+
+          # Đăng ký Active Setup cho tất cả user (hoặc chỉ user ZunnyUser)
+          # Dùng GUID ngẫu nhiên để tránh xung đột
+          $guid = [guid]::NewGuid().ToString("B")
+          $regPath = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\$guid"
+
+          New-Item -Path $regPath -Force | Out-Null
+          Set-ItemProperty -Path $regPath -Name "StubPath" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$scriptPath`"" -Force
+          Set-ItemProperty -Path $regPath -Name "Version" -Value "1,0" -Force
+          Set-ItemProperty -Path $regPath -Name "ComponentID" -Value "ZunnyWallpaper" -Force
+
+          Write-Host "│ ✅ Đã đăng ký Active Setup với GUID: $guid" -ForegroundColor Green
+          Write-Host "│ 🔄 Khi user $userName đăng nhập lần đầu, wallpaper sẽ tự động được set" -ForegroundColor Cyan
+
+          Write-Host "🎯 Cấu hình wallpaper hoàn tất!" -ForegroundColor Green
 
       # KIỂM TRA QUYỀN USER
       - name: 🔍 KIỂM TRA QUYỀN HỆ THỐNG
@@ -205,7 +188,6 @@ jobs:
           
           $user = $env:RDP_USER
           
-          # Kiểm tra user tồn tại
           $userObj = Get-LocalUser -Name $user -ErrorAction SilentlyContinue
           if ($userObj) {
               Write-Host "│ ✅ User $user tồn tại" -ForegroundColor Green
@@ -215,7 +197,6 @@ jobs:
               exit 1
           }
           
-          # Kiểm tra quyền Administrator
           $isAdmin = (Get-LocalGroupMember -Group "Administrators" | Where-Object {$_.Name -like "*$user"}).Count -gt 0
           if ($isAdmin) {
               Write-Host "│ ✅ Có quyền Administrator" -ForegroundColor Green
@@ -223,7 +204,6 @@ jobs:
               Write-Host "│ ❌ Không có quyền Administrator" -ForegroundColor Red
           }
           
-          # Kiểm tra quyền Remote Desktop
           $isRDPUser = (Get-LocalGroupMember -Group "Remote Desktop Users" | Where-Object {$_.Name -like "*$user"}).Count -gt 0
           if ($isRDPUser) {
               Write-Host "│ ✅ Có quyền Remote Desktop" -ForegroundColor Green
@@ -231,7 +211,6 @@ jobs:
               Write-Host "│ ❌ Không có quyền Remote Desktop" -ForegroundColor Red
           }
           
-          # Kiểm tra dịch vụ RDP
           $termService = Get-Service -Name TermService -ErrorAction SilentlyContinue
           if ($termService.Status -eq 'Running') {
               Write-Host "│ ✅ Dịch vụ TermService đang chạy" -ForegroundColor Green
@@ -249,7 +228,6 @@ jobs:
           Write-Host ""
           Write-Host "🌐 ĐANG THIẾT LẬP KẾT NỐI MẠNG ZUNNY" -ForegroundColor Yellow
           
-          # Cài đặt Tailscale
           try {
               $msiPath = "$env:TEMP\tailscale-zunny.msi"
               Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $msiPath
@@ -262,7 +240,6 @@ jobs:
           
           Start-Sleep -Seconds 10
           
-          # Kết nối Tailscale
           try {
               & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=$env:TAILSCALE_AUTH_KEY --hostname=zunny-cloud-$env:GITHUB_RUN_ID --accept-routes --accept-dns --reset
               Write-Host "│ ✅ Kết nối Tailscale thành công" -ForegroundColor Green
@@ -270,7 +247,6 @@ jobs:
               Write-Host "│ ❌ Lỗi kết nối Tailscale" -ForegroundColor Red
           }
           
-          # Lấy IP
           Write-Host "🔄 Đang lấy địa chỉ IP..." -NoNewline -ForegroundColor Blue
           $ip = $null
           for($i=0; $i -lt 20; $i++) {
