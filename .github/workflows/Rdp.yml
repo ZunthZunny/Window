@@ -121,11 +121,15 @@ jobs:
           }
           $scriptPath = "C:\Windows\Setup\Scripts\SetZunnyWallpaper.ps1"
           New-Item -ItemType Directory -Path "C:\Windows\Setup\Scripts" -Force -ErrorAction SilentlyContinue
-          Set-Content -Path $scriptPath -Value '$wp = "C:\Windows\Web\Wallpaper\Zunny\zunny_wallpaper.png"' -Encoding UTF8 -Force
+          Set-Content -Path $scriptPath -Value 'Start-Sleep -Seconds 3' -Encoding UTF8 -Force
+          Add-Content -Path $scriptPath -Value '$wp = "C:\Windows\Web\Wallpaper\Zunny\zunny_wallpaper.png"'
+          Add-Content -Path $scriptPath -Value 'Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\System" -Name "Wallpaper" -ErrorAction SilentlyContinue'
+          Add-Content -Path $scriptPath -Value 'Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\System" -Name "NoChangingWallPaper" -ErrorAction SilentlyContinue'
           Add-Content -Path $scriptPath -Value 'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper"      -Value $wp  -Force'
           Add-Content -Path $scriptPath -Value 'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2" -Force'
           Add-Content -Path $scriptPath -Value 'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper"  -Value "0" -Force'
-          Add-Content -Path $scriptPath -Value 'Start-Process "RUNDLL32.EXE" -ArgumentList "user32.dll,UpdatePerUserSystemParameters" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue'
+          Add-Content -Path $scriptPath -Value 'Add-Type -TypeDefinition ''using System; using System.Runtime.InteropServices; public class Win32WP { [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); }'' -ErrorAction SilentlyContinue'
+          Add-Content -Path $scriptPath -Value '[Win32WP]::SystemParametersInfo(0x14, 0, $wp, 3)'
           Write-Host "│ ✅ Đã tạo script wallpaper tại $scriptPath" -ForegroundColor Green
           $action    = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -File `"$scriptPath`""
           $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $userName
