@@ -104,10 +104,10 @@ jobs:
           echo "$matKhau" > $env:TEMP\rdp_password.txt
           Write-Host "✅ Tài khoản $userName đã sẵn sàng" -ForegroundColor Green
 
-      - name: 🖼️ CÀI ĐẶT WALLPAPER ZUNNY (ACTIVE SETUP)
+      - name: 🖼️ CÀI ĐẶT WALLPAPER ZUNNY (SCHEDULED TASK)
         run: |
           Write-Host ""
-          Write-Host "🖼️ ĐANG CÀI ĐẶT HÌNH NỀN ZUNNY QUA ACTIVE SETUP" -ForegroundColor Yellow
+          Write-Host "🖼️ ĐANG CÀI ĐẶT HÌNH NỀN ZUNNY QUA SCHEDULED TASK" -ForegroundColor Yellow
           $sourceImage = "image/image.png"
           $destImage = "C:\Windows\Web\Wallpaper\Zunny\zunny_wallpaper.png"
           $userName = $env:RDP_USER
@@ -121,37 +121,31 @@ jobs:
           }
           $scriptPath = "C:\Windows\Setup\Scripts\SetZunnyWallpaper.ps1"
           New-Item -ItemType Directory -Path "C:\Windows\Setup\Scripts" -Force -ErrorAction SilentlyContinue
-          $scriptLines = @(
-              '$wp = "C:\Windows\Web\Wallpaper\Zunny\zunny_wallpaper.png"',
-              'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value $wp -Force',
-              'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2" -Force',
-              'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper" -Value "0" -Force',
-              'Add-Type -TypeDefinition "using System; using System.Runtime.InteropServices; public class WPHelper { [DllImport(\"user32.dll\", CharSet=CharSet.Auto)] public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni); }" -ErrorAction SilentlyContinue',
-              '[WPHelper]::SystemParametersInfo(20, 0, $wp, 3)'
-          )
-          $scriptLines | Set-Content -Path $scriptPath -Encoding UTF8 -Force
-          Write-Host "│ ✅ Đã tạo script set wallpaper tại $scriptPath" -ForegroundColor Green
-          $guid = [guid]::NewGuid().ToString("B")
-          $regPath = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\$guid"
-          New-Item -Path $regPath -Force | Out-Null
-          Set-ItemProperty -Path $regPath -Name "StubPath" -Value "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`"" -Force
-          Set-ItemProperty -Path $regPath -Name "Version" -Value "1,0" -Force
-          Set-ItemProperty -Path $regPath -Name "ComponentID" -Value "ZunnyWallpaper" -Force
-          Write-Host "│ ✅ Đã đăng ký Active Setup với GUID: $guid" -ForegroundColor Green
+          Set-Content -Path $scriptPath -Value '$wp = "C:\Windows\Web\Wallpaper\Zunny\zunny_wallpaper.png"' -Encoding UTF8 -Force
+          Add-Content -Path $scriptPath -Value 'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper"      -Value $wp  -Force'
+          Add-Content -Path $scriptPath -Value 'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2" -Force'
+          Add-Content -Path $scriptPath -Value 'Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "TileWallpaper"  -Value "0" -Force'
+          Add-Content -Path $scriptPath -Value 'Start-Process "RUNDLL32.EXE" -ArgumentList "user32.dll,UpdatePerUserSystemParameters" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue'
+          Write-Host "│ ✅ Đã tạo script wallpaper tại $scriptPath" -ForegroundColor Green
+          $action    = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -File `"$scriptPath`""
+          $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $userName
+          $principal = New-ScheduledTaskPrincipal -UserId $userName -LogonType Interactive -RunLevel Highest
+          $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
+          Register-ScheduledTask -TaskName "ZunnyWallpaper" -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+          Write-Host "│ ✅ Đã tạo Scheduled Task (chạy mỗi lần $userName login)" -ForegroundColor Green
           try {
               reg load "HKU\ZunnyDefault" "C:\Users\Default\NTUSER.DAT" 2>&1 | Out-Null
               New-Item -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Force -ErrorAction SilentlyContinue | Out-Null
-              Set-ItemProperty -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Name "Wallpaper" -Value $destImage -Force -ErrorAction SilentlyContinue
-              Set-ItemProperty -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2" -Force -ErrorAction SilentlyContinue
-              Set-ItemProperty -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Name "TileWallpaper" -Value "0" -Force -ErrorAction SilentlyContinue
-              [gc]::Collect()
-              Start-Sleep -Seconds 1
+              Set-ItemProperty -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Name "Wallpaper"      -Value $destImage -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2"        -Force -ErrorAction SilentlyContinue
+              Set-ItemProperty -Path "Registry::HKU\ZunnyDefault\Control Panel\Desktop" -Name "TileWallpaper"  -Value "0"        -Force -ErrorAction SilentlyContinue
+              [gc]::Collect(); Start-Sleep -Seconds 1
               reg unload "HKU\ZunnyDefault" 2>&1 | Out-Null
               Write-Host "│ ✅ Đã set wallpaper vào Default User hive" -ForegroundColor Green
           } catch {
-              Write-Host "│ ⚠️  Không thể sửa Default User hive (bỏ qua)" -ForegroundColor Yellow
+              Write-Host "│ ⚠️  Default User hive - bỏ qua" -ForegroundColor Yellow
           }
-          Write-Host "│ 🔔 Khi user $userName đăng nhập lần đầu, wallpaper sẽ tự động được set" -ForegroundColor Cyan
+          Write-Host "│ 🔔 Wallpaper sẽ tự đổi mỗi lần $userName đăng nhập" -ForegroundColor Cyan
           Write-Host "🎯 Cấu hình wallpaper hoàn tất!" -ForegroundColor Green
 
       - name: 🔍 KIỂM TRA QUYỀN HỆ THỐNG
