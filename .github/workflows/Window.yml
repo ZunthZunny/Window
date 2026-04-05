@@ -53,8 +53,8 @@ jobs:
                   Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
               }},
               @{Name="Mở port 3389 firewall"; Script={
-                  netsh advfirewall firewall add rule name="RDP-Zunny" dir=in action=allow protocol=TCP localport=3389 profile=any
-                  netsh advfirewall firewall add rule name="RDP-Zunny-Out" dir=out action=allow protocol=TCP localport=3389 profile=any
+                  netsh advfirewall firewall add rule name="RDP-Zunny" dir=in action=allow protocol=TCP localport=3389
+                  netsh advfirewall firewall add rule name="RDP-Zunny-Out" dir=out action=allow protocol=TCP localport=3389
               }},
               @{Name="Khởi động dịch vụ RDP"; Script={
                   Set-Service -Name TermService -StartupType Automatic -ErrorAction SilentlyContinue
@@ -319,7 +319,7 @@ jobs:
           Write-Host "🧹 ĐANG DỌN DẸP HỆ THỐNG..." -ForegroundColor Yellow
           $cleanupSteps = @(
               @{Name="Xóa file password"; Script={ Remove-Item "$env:TEMP\rdp_password.txt" -ErrorAction SilentlyContinue }},
-              @{Name="Xóa user ZunnyUser"; Script={ Remove-LocalUser -Name $env:RDP_USER -ErrorAction SilentlyContinue }},
+              @{Name="Xóa user Admin"; Script={ Remove-LocalUser -Name $env:RDP_USER -ErrorAction SilentlyContinue }},
               @{Name="Đóng kết nối mạng"; Script={ & "$env:ProgramFiles\Tailscale\tailscale.exe" down --accept-risk=all -ErrorAction SilentlyContinue; Start-Sleep -Seconds 5 }},
               @{Name="Xóa rule firewall"; Script={ netsh advfirewall firewall delete rule name="RDP-Zunny" dir=in -ErrorAction SilentlyContinue; netsh advfirewall firewall delete rule name="RDP-Zunny-Out" dir=out -ErrorAction SilentlyContinue }},
               @{Name="Khôi phục cài đặt RDP"; Script={ Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force -ErrorAction SilentlyContinue; Stop-Service -Name TermService -Force -ErrorAction SilentlyContinue }}
