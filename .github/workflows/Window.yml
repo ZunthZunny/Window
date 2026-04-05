@@ -79,10 +79,10 @@ jobs:
         run: |
           Write-Host ""
           Write-Host "👤 ĐANG TẠO TÀI KHOẢN ZUNNY" -ForegroundColor Yellow
-          $randomPart = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 6 | ForEach-Object { [char]$_ })
-          $matKhau = "Zunny$randomPart"
+          $randomPart = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 12 | ForEach-Object { [char]$_ })
+          $matKhau = "Admin-$randomPart"
           $securePass = ConvertTo-SecureString $matKhau -AsPlainText -Force
-          $userName = "ZunnyUser"
+          $userName = "Admin"
           try {
               Remove-LocalUser -Name $userName -ErrorAction SilentlyContinue
               Write-Host "│ ✅ Đã xóa user cũ (nếu có)" -ForegroundColor Green
