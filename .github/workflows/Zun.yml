@@ -4,6 +4,6 @@ on: workflow_dispatch
 
 jobs:
   test:
-    runs-on: ubuntu-8-cores
+    runs-on: ubuntu-4-cores
     steps:
       - run: nproc
