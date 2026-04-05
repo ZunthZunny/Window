@@ -1,0 +1,16 @@
+name: Test 16 Core Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-16-cores   # thử 16 core
+
+    steps:
+      - name: Check CPU
+        run: |
+          echo "Number of cores:"
+          nproc
+          echo "CPU detail:"
+          lscpu
