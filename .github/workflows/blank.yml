@@ -1,0 +1,21 @@
+name: Test 72h Limit
+
+on:
+  workflow_dispatch:   # chạy thủ công
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4320   # 72h = 4320 phút
+
+    steps:
+      - name: Start
+        run: echo "Start testing 72h..."
+
+      - name: Keep alive
+        run: |
+          echo "Running..."
+          sleep 259000   # ~72h (259200s là 72h)
+      
+      - name: Done
+        run: echo "Finished"
